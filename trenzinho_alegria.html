@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Trenzinho da Alegria 3D</title>
+<style>
+*{box-sizing:border-box}body{margin:0;overflow:hidden;background:#8bc8ed;font-family:system-ui,Arial;touch-action:none}
+#hud{position:fixed;top:10px;left:10px;color:white;background:#102334bb;padding:9px 12px;border-radius:12px;font-weight:700;font-size:14px}
+#hint{position:fixed;top:10px;right:10px;color:white;background:#102334bb;padding:8px 10px;border-radius:12px;font-size:12px}
+.controls{position:fixed;bottom:18px;left:0;right:0;display:flex;justify-content:space-between;align-items:end;padding:0 15px;gap:8px}
+.group{display:flex;gap:8px;align-items:end}.btn{border:2px solid #ffffffaa;border-radius:16px;background:#152b3cdd;color:white;font-size:15px;font-weight:800;min-width:62px;height:62px;box-shadow:0 4px 0 #08131c99;touch-action:none}
+.btn:active,.btn.on{background:#e55d18}.wide{min-width:78px;font-size:12px;height:52px}
+#msg{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);background:#102334bb;color:white;padding:7px 12px;border-radius:10px;font-size:12px;white-space:nowrap}
+</style>
+</head>
+<body>
+<div id="hud">🚂 Trenzinho da Alegria <span id="speed">0 km/h</span><br><small>💰 R$ <span id="money">0</span> · 🧍 <span id="passengers">0</span>/12 passageiros</small></div>
+<div id="hint">Protótipo 3D • toque para dirigir</div><div id="msg">Missão: pare nas paradas para pegar passageiros</div>
+<div class="controls">
+ <div class="group"><button class="btn" id="left">◀</button><button class="btn" id="right">▶</button></div>
+ <div class="group"><button class="btn wide" id="cam">📷 Câmera</button><button class="btn wide" id="horn">🔊 Buzina</button><button class="btn wide" id="custom">🎨 Cor</button><button class="btn wide" id="music">🎵 Música</button></div>
+ <div class="group"><button class="btn" id="back">▼</button><button class="btn" id="go">▲</button></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x91c9ee);scene.fog=new THREE.Fog(0x91c9ee,70,230);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x627b61,1.15));const sun=new THREE.DirectionalLight(0xffffff,1.1);sun.position.set(-35,65,35);sun.castShadow=true;scene.add(sun);
+const mat=(c,rough=0.8)=>new THREE.MeshStandardMaterial({color:c,roughness:rough});
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(500,500),mat(0x57934c));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+const road=new THREE.Mesh(new THREE.PlaneGeometry(15,400),mat(0x41474b));road.rotation.x=-Math.PI/2;road.position.y=.015;road.receiveShadow=true;scene.add(road);
+for(let z=-190;z<210;z+=12){let stripe=new THREE.Mesh(new THREE.PlaneGeometry(.25,5),mat(0xf3e8ba));stripe.rotation.x=-Math.PI/2;stripe.position.set(0,.03,z);scene.add(stripe)}
+// Cidade aprimorada: calcadas, fachadas, lojas, arvores e postes
+for(let side of [-1,1]){
+ const sidewalk=new THREE.Mesh(new THREE.PlaneGeometry(5,400),mat(0xb9b6a9));
+ sidewalk.rotation.x=-Math.PI/2;sidewalk.position.set(side*10.2,.045,0);scene.add(sidewalk);
+}
+for(let z=-175;z<190;z+=23){
+ for(let side of [-1,1]){
+  let w=7+Math.random()*7,h=7+Math.random()*18,d=9+Math.random()*8;
+  let bx=side*(17+w/2+Math.random()*3),bz=z+Math.random()*8;
+  let colors=[0xe6c7a2,0xe3e7e8,0xd9a99b,0xc8d5b5,0xd6c5e8,0xd7bd8b];
+  let b=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(colors[Math.floor(Math.random()*colors.length)]));
+  b.position.set(bx,h/2,bz);b.castShadow=true;b.receiveShadow=true;scene.add(b);
+  let roof=cube(scene,w+.25,.28,d+.25,0x8a5145,bx,h+.12,bz);
+  // front door and windows face the road
+  let front=bx-side*(w/2+.06);
+  let door=cube(scene,1.15,2.25,.12,0x684b38,front,1.15,bz+d/2+.08);
+  for(let y=2.1;y<h-1;y+=3){
+   for(let x=-w/2+1.4;x<w/2;x+=2.8){
+    let win=cube(scene,1.25,1.25,.1,0x6b9eb6,bx+x,y,bz+d/2+.08);
+    if(Math.random()>.65)cube(scene,1.4,.12,.14,0xf1e6cf,bx+x,y-.72,bz+d/2+.13);
+   }
+  }
+  // shopfronts on selected buildings
+  if(Math.abs(z)%46<2){cube(scene,w*.7,1.1,.18,0x287d91,front,3.15,bz+d/2+.14);cube(scene,w*.72,.2,.22,0xf2c34b,front,3.85,bz+d/2+.18);}
+ }
+}
+// roadside trees and lamps in repeating rows
+for(let z=-180;z<195;z+=18){
+ for(let side of [-1,1]){
+  let tx=side*(13.3+Math.random()*1.2);
+  let trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18,.25,2.3,7),mat(0x765039));trunk.position.set(tx,1.15,z);trunk.castShadow=true;scene.add(trunk);
+  let crown=new THREE.Mesh(new THREE.SphereGeometry(1.25,9,7),mat([0x347b42,0x438b49,0x2e6e3b][Math.floor(Math.random()*3)]));crown.position.set(tx,3,z);crown.castShadow=true;scene.add(crown);
+  if(z%36===0){let pole=cube(scene,.12,4,.12,0x555b60,side*8.1,2,z);let arm=cube(scene,1.1,.12,.12,0x555b60,side*7.65,3.85,z);let lamp=new THREE.Mesh(new THREE.SphereGeometry(.23,8,6),mat(0xffedb0));lamp.position.set(side*7.1,3.8,z);scene.add(lamp);}
+ }
+}
+const train=new THREE.Group();scene.add(train);
+function cube(parent,w,h,d,color,x,y,z){let m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}
+cube(train,3.2,1.05,4,0x11a9b5,0,1.05,0);cube(train,2.5,1.05,2.1,0xf0a51c,0,1.95,.35);cube(train,2.3,.45,1.6,0x253847,0,2.7,.4);
+for(let x of [-.85,.85])cube(train,.65,.55,.08,0x8feaff,x,2.05,1.42);
+cube(train,3.35,.18,4.15,0xf12e91,0,1.62,0);
+for(let x of [-1.35,1.35])for(let z of [-1.3,1.3]){let wh=new THREE.Mesh(new THREE.CylinderGeometry(.52,.52,.25,16),mat(0x20252a));wh.rotation.z=Math.PI/2;wh.position.set(x,.52,z);wh.castShadow=true;train.add(wh)}
+// speaker wall
+for(let x of [-.95,0,.95]){cube(train,.72,.78,.22,0x202d39,x,2.1,-1.45);let sp=new THREE.Mesh(new THREE.CylinderGeometry(.27,.27,.08,24),mat(0x11151b));sp.rotation.x=Math.PI/2;sp.position.set(x,2.1,-1.31);train.add(sp);let ring=new THREE.Mesh(new THREE.TorusGeometry(.28,.045,8,24),mat(0x25eaff));ring.position.set(x,2.1,-1.25);train.add(ring)}
+// trailing wagons
+const wagons=[];for(let i=0;i<3;i++){let g=new THREE.Group();scene.add(g);cube(g,2.8,.65,3.3,[0x9b40d5,0xf05b9a,0x18a9a1][i],0,.85,0);cube(g,2.95,.13,3.45,0xf8c52d,0,1.22,0);for(let x of [-1.15,1.15])for(let z of [-.9,.9]){let wh=new THREE.Mesh(new THREE.CylinderGeometry(.42,.42,.2,14),mat(0x24272b));wh.rotation.z=Math.PI/2;wh.position.set(x,.42,z);g.add(wh)}wagons.push(g)}
+
+// Paradas, passageiros e objetivos simples
+let money=0,passengers=0,stopIndex=0,paintIndex=0;
+const paintColors=[0x11a9b5,0xe83e8c,0x713bd1,0x17a66a,0xf08b18];
+const stops=[];
+for(let z of [-65,15,95,175]){
+ const pad=new THREE.Mesh(new THREE.CylinderGeometry(2.2,2.2,.18,24),mat(0xffd34e));pad.position.set(7,.12,z);scene.add(pad);
+ const pole=cube(scene,.18,3,.18,0xf4f4f4,7,1.6,z);
+ const sign=cube(scene,1.3,.65,.12,0x1b6e9b,7,3.1,z);
+ stops.push({x:7,z,mesh:pad,done:false});
+}
+const people=[];
+function makePerson(x,z,color){
+ const g=new THREE.Group();const shirt=mat(color),skin=mat(0xd5a17d),dark=mat(0x30343b);
+ const body=new THREE.Mesh(new THREE.CylinderGeometry(.25,.32,.85,8),shirt);body.position.y=1.05;g.add(body);
+ const head=new THREE.Mesh(new THREE.SphereGeometry(.23,10,8),skin);head.position.y=1.62;g.add(head);
+ for(let sx of [-.13,.13]){let leg=new THREE.Mesh(new THREE.CylinderGeometry(.09,.1,.55,7),dark);leg.position.set(sx,.35,0);g.add(leg)}
+ g.position.set(x,0,z);scene.add(g);return g;
+}
+for(let i=0;i<10;i++){let side=i%2?1:-1,z=-95+i*24;people.push({mesh:makePerson(side*(9+Math.random()*2),z,[0x397bd1,0xe74f8b,0x35a66b,0xd89b29][i%4]),walking:true})}
+const traffic=[];
+for(let i=0;i<4;i++){let car=new THREE.Group();cube(car,2,1,3.6,[0xd84a3d,0x477dc1,0xe5e5e5,0x30343b][i],0,.75,0);cube(car,1.55,.75,1.6,0x8bc9e7,0,1.55,-.15);car.position.set(i%2?5:-5,0,-140+i*75);scene.add(car);traffic.push(car)}
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,500);let inside=false;let speed=0,steer=0,heading=0;const held={};function bind(id,key){let el=document.getElementById(id);el.addEventListener('pointerdown',e=>{e.preventDefault();held[key]=true;el.classList.add('on');el.setPointerCapture(e.pointerId)});for(let ev of ['pointerup','pointercancel','lostpointercapture'])el.addEventListener(ev,()=>{held[key]=false;el.classList.remove('on')})}
+bind('go','go');bind('back','back');bind('left','left');bind('right','right');
+document.getElementById('cam').onclick=()=>inside=!inside;
+document.getElementById('custom').onclick=()=>{paintIndex=(paintIndex+1)%paintColors.length;train.children[0].material.color.setHex(paintColors[paintIndex]);document.getElementById('msg').textContent='🎨 Nova cor aplicada ao trenzinho!'};
+document.getElementById('horn').onclick=()=>{try{let ac=new(window.AudioContext||window.webkitAudioContext)(),o=ac.createOscillator(),g=ac.createGain();o.type='sawtooth';o.frequency.setValueAtTime(330,ac.currentTime);o.frequency.exponentialRampToValueAtTime(190,ac.currentTime+.45);g.gain.setValueAtTime(.13,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.6);o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+.6)}catch(e){}};
+
+// Música eletrônica simples gerada no próprio navegador (sem arquivo externo)
+let musicOn=false,musicCtx=null,musicTimer=null,musicStep=0;
+function toggleMusic(){
+ musicOn=!musicOn;const btn=document.getElementById('music');
+ btn.textContent=musicOn?'🎵 Música ON':'🎵 Música';
+ if(musicOn){
+  try{
+   musicCtx=new(window.AudioContext||window.webkitAudioContext)();
+   const notes=[261.63,329.63,392,329.63,293.66,349.23,440,349.23];
+   musicTimer=setInterval(()=>{
+    if(!musicCtx)return;
+    const osc=musicCtx.createOscillator(),gain=musicCtx.createGain();
+    osc.type='triangle';osc.frequency.value=notes[musicStep++%notes.length];
+    gain.gain.setValueAtTime(.0001,musicCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.045,musicCtx.currentTime+.025);
+    gain.gain.exponentialRampToValueAtTime(.0001,musicCtx.currentTime+.22);
+    osc.connect(gain);gain.connect(musicCtx.destination);osc.start();osc.stop(musicCtx.currentTime+.24);
+   },250);
+  }catch(e){musicOn=false;btn.textContent='🎵 Música';}
+ }else{if(musicTimer)clearInterval(musicTimer);musicTimer=null;if(musicCtx){musicCtx.close();musicCtx=null;}}
+}
+document.getElementById('music').onclick=toggleMusic;
+function frame(){requestAnimationFrame(frame);let dt=Math.min(.04,clock.getDelta());if(held.go)speed=Math.min(16,speed+8*dt);else if(held.back)speed=Math.max(-5,speed-9*dt);else speed*=Math.pow(.88,dt*30);if(held.left)steer=1;else if(held.right)steer=-1;else steer=0;if(Math.abs(speed)>.15)heading+=steer*1.15*dt*Math.sign(speed);train.rotation.y=heading;train.position.x+=Math.sin(heading)*speed*dt;train.position.z+=Math.cos(heading)*speed*dt;
+wagons.forEach((w,i)=>{let dist=(i+1)*4.1;let a=heading;let target=new THREE.Vector3(train.position.x-Math.sin(a)*dist,.0,train.position.z-Math.cos(a)*dist);w.position.lerp(target,Math.min(1,dt*5));w.rotation.y=heading+Math.sin(Date.now()*.003+i)*.035;w.rotation.z=Math.sin(Date.now()*.004+i)*.012});
+
+// Passageiros embarcam automaticamente ao parar perto de uma parada
+stops.forEach(st=>{let dx=train.position.x-st.x,dz=train.position.z-st.z;if(!st.done&&Math.hypot(dx,dz)<4&&Math.abs(speed)<1.2){st.done=true;let n=Math.min(3,12-passengers);passengers+=n;money+=n*25;st.mesh.material.color.setHex(0x39c96b);document.getElementById('msg').textContent='🧍 '+n+' passageiros embarcaram! +R$ '+(n*25);}});
+people.forEach(p=>{if(p.walking){p.mesh.position.x+=Math.sin(Date.now()*.0005+p.mesh.position.z)*.003;}});
+traffic.forEach((car,i)=>{car.position.z+=Math.sin(Date.now()*.0003+i)*.018;if(car.position.z>210)car.position.z=-180;});
+document.getElementById('money').textContent=money;document.getElementById('passengers').textContent=passengers;
+if(passengers>=3&&Math.abs(train.position.z)>100){money+=passengers*5;passengers=0;document.getElementById('msg').textContent='🎉 Passeio concluído! Bônus recebido.';}
+let target,look;if(inside){target=new THREE.Vector3(train.position.x,train.position.y+2.5,train.position.z+1.15);look=new THREE.Vector3(train.position.x+Math.sin(heading)*10,2,train.position.z+Math.cos(heading)*10)}else{target=new THREE.Vector3(train.position.x-Math.sin(heading)*9,5.2,train.position.z-Math.cos(heading)*9);look=new THREE.Vector3(train.position.x,1.4,train.position.z)}camera.position.lerp(target,.12);camera.lookAt(look);document.getElementById('speed').textContent=Math.round(Math.abs(speed)*3)+' km/h';
+const ledColors=[0x25eaff,0xff36b7,0xffd52e,0x53ff75];let led=ledColors[Math.floor(Date.now()/300)%ledColors.length];train.children.forEach((obj,idx)=>{if(obj.material&&obj.material.color&&idx>10)obj.material.color.setHex(led)});
+renderer.render(scene,camera)}
+const clock=new THREE.Clock();train.position.set(0,0,0);frame();onresize=()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)};
+</script></body></html>
